@@ -8,12 +8,9 @@ venv/
 dist/
 build/
 data/raw/
-data/processed/
 data/synthetic/
-experiments/
 frontend/node_modules/
 frontend/build/
 mlruns/
-*.pt
 *.pth
 .env
