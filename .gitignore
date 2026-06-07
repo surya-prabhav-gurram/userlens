@@ -14,3 +14,4 @@ frontend/build/
 mlruns/
 *.pth
 .env
+experiments/pretrain/bert4rec_epoch*.pt
