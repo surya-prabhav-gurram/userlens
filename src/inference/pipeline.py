@@ -126,7 +126,8 @@ class RecommendationPipeline:
         reasoning = "Neural ranking"
         if mode in ("llm", "hybrid") and self.llm:
             history_titles = [self._get_item_title(i) for i in user_sequence[-10:]]
-            candidates, reasoning = self.llm.rerank(history_titles, candidates[:20], top_k=top_k)
+            candidates, llm_reasoning = self.llm.rerank(history_titles, candidates[:20], top_k=top_k)
+            reasoning = llm_reasoning if mode == "llm" else f"Hybrid (neural + LLM): {llm_reasoning}"
         else:
             candidates = candidates[:top_k]
 
