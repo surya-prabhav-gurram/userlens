@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { api } from '../api';
-import { Zap, Brain, Layers } from 'lucide-react';
 
-const MODE_OPTIONS = [
-  { value: 'neural', label: 'Neural', icon: <Zap size={14}/> },
-  { value: 'llm',    label: 'LLM Re-rank', icon: <Brain size={14}/> },
-  { value: 'hybrid', label: 'Hybrid', icon: <Layers size={14}/> },
+const MODES = [
+  { value: 'neural', label: 'Neural' },
+  { value: 'llm',    label: 'LLM Re-rank' },
+  { value: 'hybrid', label: 'Hybrid' },
 ];
 
 export default function RecommendationFeed({ users }) {
@@ -19,135 +18,220 @@ export default function RecommendationFeed({ users }) {
   const [error, setError]         = useState('');
   const [liked, setLiked]         = useState(new Set());
 
-  async function fetchRecs(uid) {
+  async function fetchRecs(uid, m) {
     if (!uid) return;
     setLoading(true); setError('');
     try {
       const [hist, rec] = await Promise.all([
         api.userHistory(uid),
-        api.recommend({ user_id: parseInt(uid), k: 10, mode }),
+        api.recommend({ user_id: parseInt(uid), k: 10, mode: m || mode }),
       ]);
       setHistory(hist.history || []);
       setRecs(rec.items || []);
       setReasoning(rec.reasoning || '');
       setPathway(rec.pathway || '');
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
   }
 
   async function handleLike(itemId) {
     setLiked(s => new Set([...s, itemId]));
-    await api.feedback({ user_id: parseInt(userId), item_id: itemId, interaction_type: 'like' }).catch(()=>{});
+    await api.feedback({ user_id: parseInt(userId), item_id: itemId, interaction_type: 'like' }).catch(() => {});
   }
 
   const maxScore = recs.length ? Math.max(...recs.map(r => r.score)) : 1;
 
   return (
-    <div style={styles.container}>
-      {/* Controls */}
-      <div style={styles.controls}>
-        <select
-          style={styles.select}
-          value={userId}
-          onChange={e => { setUserId(e.target.value); fetchRecs(e.target.value); }}
-        >
-          <option value="">Select a user…</option>
-          {(users || []).map(u => (
-            <option key={u.user_id} value={u.user_id}>
-              User {u.user_id} ({u.n_interactions} interactions)
-            </option>
-          ))}
-        </select>
+    <div>
+      <style>{`
+        .rec-row:hover { background: rgba(200,169,110,0.04) !important; }
+        .hist-row:hover { background: rgba(200,169,110,0.03) !important; }
+        .like-btn:hover { color: #c8a96e !important; }
+        .mode-btn:hover { border-color: #c8a96e !important; color: #c8a96e !important; }
+        .user-select option { background: #0d0d0d; }
+        @keyframes barGrow { from{width:0} to{width:var(--w)} }
+      `}</style>
 
-        <div style={styles.modeGroup}>
-          {MODE_OPTIONS.map(m => (
+      {/* Header */}
+      <div style={S.header}>
+        <div>
+          <h2 style={S.pageTitle}>Recommendations</h2>
+          <p style={S.pageSubtitle}>Neural retrieval with cross-attention ranking</p>
+        </div>
+      </div>
+
+      {/* Controls */}
+      <div style={S.controls}>
+        <div style={S.selectWrap}>
+          <select
+            className="user-select"
+            style={S.select}
+            value={userId}
+            onChange={e => { setUserId(e.target.value); fetchRecs(e.target.value); }}
+          >
+            <option value="">Select a user...</option>
+            {(users || []).map(u => (
+              <option key={u.user_id} value={u.user_id}>
+                User {u.user_id} — {u.n_interactions} interactions
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div style={S.modeGroup}>
+          {MODES.map(m => (
             <button
               key={m.value}
-              style={{ ...styles.modeBtn, ...(mode === m.value ? styles.modeBtnActive : {}) }}
-              onClick={() => { setMode(m.value); if (userId) fetchRecs(userId); }}
+              className="mode-btn"
+              style={{ ...S.modeBtn, ...(mode === m.value ? S.modeBtnActive : {}) }}
+              onClick={() => { setMode(m.value); if (userId) fetchRecs(userId, m.value); }}
             >
-              {m.icon} {m.label}
+              {m.label}
             </button>
           ))}
         </div>
       </div>
 
-      {error && <div style={styles.error}>{error}</div>}
+      {error && <div style={S.error}>{error}</div>}
 
-      <div style={styles.panels}>
-        {/* History */}
-        <div style={styles.panel}>
-          <h3 style={styles.panelTitle}>Interaction History</h3>
-          {history.length === 0 && <p style={styles.empty}>Select a user to view history</p>}
-          {history.map((item, i) => (
-            <div key={i} style={styles.histItem}>
-              <span style={styles.histRank}>#{history.length - i}</span>
-              <span style={styles.itemTitle}>{item.title}</span>
-            </div>
-          ))}
+      {/* Panels */}
+      <div style={S.panels}>
+        {/* History Panel */}
+        <div style={S.panel}>
+          <div style={S.panelHeader}>
+            <span style={S.panelLabel}>Interaction History</span>
+            {history.length > 0 && <span style={S.panelCount}>{history.length} items</span>}
+          </div>
+          <div style={S.panelBody}>
+            {history.length === 0 && (
+              <div style={S.empty}>Select a user to view history</div>
+            )}
+            {history.map((item, i) => (
+              <div key={i} className="hist-row" style={S.histRow}>
+                <span style={S.histIdx}>{String(history.length - i).padStart(2, '0')}</span>
+                <span style={S.histTitle}>{item.title}</span>
+              </div>
+            ))}
+          </div>
         </div>
 
-        {/* Recommendations */}
-        <div style={styles.panel}>
-          <h3 style={styles.panelTitle}>
-            Recommendations
-            {pathway && <span style={styles.pathwayBadge}>{pathway}</span>}
-          </h3>
-          {loading && <p style={styles.empty}>Generating recommendations…</p>}
-          {!loading && recs.length === 0 && <p style={styles.empty}>No recommendations yet</p>}
-          {recs.map((item, i) => (
-            <div key={item.item_id} style={styles.recItem}>
-              <div style={styles.recHeader}>
-                <span style={styles.recRank}>#{i + 1}</span>
-                <span style={styles.itemTitle}>{item.title}</span>
-                <button
-                  style={{ ...styles.likeBtn, ...(liked.has(item.item_id) ? styles.likeBtnActive : {}) }}
-                  onClick={() => handleLike(item.item_id)}
-                >♥</button>
+        {/* Recommendations Panel */}
+        <div style={S.panel}>
+          <div style={S.panelHeader}>
+            <span style={S.panelLabel}>Recommendations</span>
+            {pathway && <span style={S.pathwayTag}>{pathway}</span>}
+          </div>
+          <div style={S.panelBody}>
+            {loading && <div style={S.empty}>Generating recommendations...</div>}
+            {!loading && recs.length === 0 && <div style={S.empty}>No recommendations yet</div>}
+            {recs.map((item, i) => (
+              <div key={item.item_id} className="rec-row" style={S.recRow}>
+                <div style={S.recMeta}>
+                  <span style={S.recRank}>{String(i + 1).padStart(2, '0')}</span>
+                  <span style={S.recTitle}>{item.title}</span>
+                  <button
+                    className="like-btn"
+                    style={{ ...S.likeBtn, ...(liked.has(item.item_id) ? S.likeBtnActive : {}) }}
+                    onClick={() => handleLike(item.item_id)}
+                  >
+                    {liked.has(item.item_id) ? '♥' : '♡'}
+                  </button>
+                </div>
+                <div style={S.barTrack}>
+                  <div style={{
+                    ...S.barFill,
+                    '--w': `${(item.score / maxScore) * 100}%`,
+                    width: `${(item.score / maxScore) * 100}%`,
+                    animation: `barGrow 0.6s ease ${i * 0.05}s both`,
+                  }} />
+                </div>
+                <span style={S.scoreVal}>{item.score.toFixed(3)}</span>
               </div>
-              <div style={styles.scoreBar}>
-                <div style={{ ...styles.scoreBarFill, width: `${(item.score / maxScore) * 100}%` }} />
+            ))}
+            {reasoning && recs.length > 0 && (
+              <div style={S.reasoningBox}>
+                <div style={S.reasoningLabel}>Reasoning</div>
+                <div style={S.reasoningText}>{reasoning}</div>
               </div>
-              <span style={styles.scoreLabel}>{item.score.toFixed(3)}</span>
-            </div>
-          ))}
-          {reasoning && (
-            <div style={styles.reasoning}>
-              <strong>Reasoning:</strong> {reasoning}
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-const styles = {
-  container: { padding: 0 },
-  controls:  { display:'flex', gap:12, flexWrap:'wrap', marginBottom:20, alignItems:'center' },
-  select:    { padding:'8px 12px', borderRadius:8, border:'1px solid #334155', background:'#1e293b', color:'#e2e8f0', fontSize:14, minWidth:220 },
-  modeGroup: { display:'flex', gap:6 },
-  modeBtn:   { display:'flex', alignItems:'center', gap:4, padding:'6px 14px', borderRadius:8, border:'1px solid #334155', background:'#1e293b', color:'#94a3b8', cursor:'pointer', fontSize:13 },
-  modeBtnActive: { background:'#6366f1', border:'1px solid #6366f1', color:'#fff' },
-  panels:    { display:'grid', gridTemplateColumns:'1fr 1fr', gap:20 },
-  panel:     { background:'#1e293b', borderRadius:12, padding:16 },
-  panelTitle:{ margin:'0 0 12px', fontSize:15, color:'#e2e8f0', display:'flex', alignItems:'center', gap:8 },
-  pathwayBadge: { fontSize:11, padding:'2px 8px', borderRadius:12, background:'#312e81', color:'#a5b4fc', marginLeft:8 },
-  empty:     { color:'#475569', fontSize:14 },
-  histItem:  { display:'flex', gap:8, padding:'6px 0', borderBottom:'1px solid #0f172a', alignItems:'center' },
-  histRank:  { color:'#475569', fontSize:12, minWidth:28 },
-  itemTitle: { color:'#cbd5e1', fontSize:14, flex:1 },
-  recItem:   { padding:'8px 0', borderBottom:'1px solid #0f172a' },
-  recHeader: { display:'flex', alignItems:'center', gap:8, marginBottom:4 },
-  recRank:   { color:'#6366f1', fontSize:13, fontWeight:700, minWidth:28 },
-  scoreBar:  { height:4, background:'#0f172a', borderRadius:2, marginBottom:2 },
-  scoreBarFill: { height:'100%', background:'linear-gradient(90deg,#6366f1,#818cf8)', borderRadius:2, transition:'width 0.5s' },
-  scoreLabel:{ fontSize:11, color:'#475569' },
-  likeBtn:   { background:'transparent', border:'none', color:'#475569', cursor:'pointer', fontSize:16 },
-  likeBtnActive: { color:'#f43f5e' },
-  reasoning: { marginTop:12, padding:10, background:'#0f172a', borderRadius:8, fontSize:13, color:'#94a3b8', lineHeight:1.5 },
-  error:     { color:'#f87171', marginBottom:12, fontSize:14 },
+const S = {
+  header: { marginBottom: 32 },
+  pageTitle: { fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', color: '#e8e0d4' },
+  pageSubtitle: { fontSize: 12, color: '#3a3530', marginTop: 4, letterSpacing: '0.04em', fontFamily: "'JetBrains Mono', monospace" },
+
+  controls: { display:'flex', gap:12, alignItems:'center', marginBottom:28, flexWrap:'wrap' },
+  selectWrap: { position:'relative' },
+  select: {
+    padding: '10px 16px',
+    background: '#0d0d0d',
+    border: '1px solid #1a1a1a',
+    color: '#e8e0d4',
+    fontSize: 13,
+    fontFamily: "'Syne', sans-serif",
+    minWidth: 240,
+    cursor: 'pointer',
+    outline: 'none',
+    appearance: 'none',
+    borderRadius: 0,
+  },
+  modeGroup: { display:'flex', gap:0 },
+  modeBtn: {
+    padding: '10px 18px',
+    background: 'transparent',
+    border: '1px solid #1a1a1a',
+    borderLeft: 'none',
+    color: '#3a3530',
+    cursor: 'pointer',
+    fontSize: 12,
+    fontFamily: "'Syne', sans-serif",
+    fontWeight: 600,
+    letterSpacing: '0.04em',
+    textTransform: 'uppercase',
+    transition: 'all 0.15s',
+  },
+  modeBtnActive: { background:'#c8a96e', color:'#080808', borderColor:'#c8a96e' },
+
+  panels: { display:'grid', gridTemplateColumns:'1fr 1fr', gap:1, background:'#1a1a1a' },
+  panel: { background:'#0d0d0d' },
+  panelHeader: {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    padding: '14px 20px',
+    borderBottom: '1px solid #1a1a1a',
+  },
+  panelLabel: { fontFamily:"'JetBrains Mono',monospace", fontSize:10, color:'#3a3530', letterSpacing:'0.12em', textTransform:'uppercase' },
+  panelCount: { fontFamily:"'JetBrains Mono',monospace", fontSize:10, color:'#c8a96e' },
+  pathwayTag: {
+    fontFamily:"'JetBrains Mono',monospace", fontSize:9, color:'#c8a96e',
+    border:'1px solid rgba(200,169,110,0.3)', padding:'2px 8px', letterSpacing:'0.08em',
+  },
+  panelBody: { padding:'8px 0', maxHeight:520, overflowY:'auto' },
+
+  empty: { padding:'40px 20px', color:'#2a2520', fontSize:12, fontFamily:"'JetBrains Mono',monospace" },
+
+  histRow: { display:'flex', alignItems:'center', gap:12, padding:'8px 20px', transition:'background 0.1s' },
+  histIdx: { fontFamily:"'JetBrains Mono',monospace", fontSize:10, color:'#2a2520', minWidth:20, flexShrink:0 },
+  histTitle: { fontSize:13, color:'#6a6560', flex:1, lineHeight:1.4 },
+
+  recRow: { padding:'10px 20px', transition:'background 0.1s' },
+  recMeta: { display:'flex', alignItems:'center', gap:10, marginBottom:6 },
+  recRank: { fontFamily:"'JetBrains Mono',monospace", fontSize:11, color:'#c8a96e', minWidth:22, flexShrink:0, fontWeight:500 },
+  recTitle: { fontSize:13, color:'#c8c0b8', flex:1, lineHeight:1.4 },
+  likeBtn: { background:'transparent', border:'none', color:'#2a2520', cursor:'pointer', fontSize:14, flexShrink:0, transition:'color 0.15s', padding:'0 2px' },
+  likeBtnActive: { color:'#c8a96e' },
+  barTrack: { height:2, background:'#111', marginBottom:4 },
+  barFill: { height:'100%', background:'linear-gradient(90deg, #c8a96e, #e8d4a8)', transformOrigin:'left' },
+  scoreVal: { fontFamily:"'JetBrains Mono',monospace", fontSize:9, color:'#2a2520' },
+
+  reasoningBox: { margin:'16px 20px 8px', padding:'14px 16px', background:'#080808', borderLeft:'2px solid rgba(200,169,110,0.3)' },
+  reasoningLabel: { fontFamily:"'JetBrains Mono',monospace", fontSize:9, color:'#c8a96e', letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:8 },
+  reasoningText: { fontSize:12, color:'#4a4540', lineHeight:1.7 },
+
+  error: { color:'#ef4444', fontSize:12, marginBottom:16, fontFamily:"'JetBrains Mono',monospace" },
 };

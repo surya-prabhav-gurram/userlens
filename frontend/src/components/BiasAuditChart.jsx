@@ -7,116 +7,108 @@ export default function BiasAuditChart() {
   const [loading, setLoading] = useState(false);
   const [running, setRunning] = useState(false);
 
-  useEffect(() => { loadAudit(); }, []);
+  useEffect(() => { load(); }, []);
 
-  async function loadAudit() {
+  async function load() {
     setLoading(true);
-    try { setData(await api.biasAudit()); } catch(e) {}
+    try { setData(await api.biasLatest()); } catch(e) {}
     setLoading(false);
   }
 
-  async function runAudit() {
+  async function run() {
     setRunning(true);
     try {
       await api.biasRun(100);
-      await new Promise(r => setTimeout(r, 2000));
-      await loadAudit();
+      await new Promise(r => setTimeout(r, 3000));
+      await load();
     } catch(e) {}
     setRunning(false);
   }
 
-  // Normalise metrics to 0-100 for radar
-  const radarData = data && !data.message ? [
-    { dim:'Pop Bias (Top 10%)',  value: (1 - (data.pop_conc_top10pct_at10 || 0)) * 100 },
-    { dim:'Pop Bias (Top 20%)',  value: (1 - (data.pop_conc_top20pct_at10 || 0)) * 100 },
-    { dim:'Genre Diversity',     value: Math.min(100, (data.genre_entropy || 0) * 20) },
-    { dim:'Avg Popularity',      value: Math.max(0, 100 - Math.min(100, (data.avg_pop_at10 || 0) / 10)) },
-    { dim:'Genre Count',         value: Math.min(100, (data.n_genres || 0) * 5) },
+  const radarData = data ? [
+    { axis: 'Pop Bias (Top 10%)', value: 1 - (data['pop_conc_top10pct@10'] || 0) },
+    { axis: 'Pop Bias (Top 20%)', value: 1 - (data['pop_conc_top20pct@10'] || 0) },
+    { axis: 'Genre Diversity',    value: Math.min((data['genre_entropy@10'] || 0) / 3, 1) },
+    { axis: 'Avg Popularity',     value: 1 - Math.min((data['avg_pop@10'] || 0) / 20, 1) },
+    { axis: 'Genre Count',        value: Math.min((data['avg_genre_count@10'] || 0) / 5, 1) },
+  ] : [];
+
+  const stats = data ? [
+    { label:'Pop conc. (top 10%)', val: (data['pop_conc_top10pct@10'] || 0).toFixed(3) },
+    { label:'Pop conc. (top 20%)', val: (data['pop_conc_top20pct@10'] || 0).toFixed(3) },
+    { label:'Genre count',         val: data['avg_genre_count@10'] != null ? data['avg_genre_count@10'].toFixed(2) : '—' },
+    { label:'Genre entropy',       val: data['genre_entropy@10'] != null ? data['genre_entropy@10'].toFixed(3) : '0.00' },
   ] : [];
 
   return (
     <div>
-      <div style={styles.header}>
+      <style>{`.audit-btn:hover { background: #b89858 !important; }`}</style>
+
+      <div style={S.header}>
         <div>
-          <h3 style={styles.title}>Bias Audit</h3>
-          {data?.timestamp && <p style={styles.ts}>Last run: {new Date(data.timestamp).toLocaleString()}</p>}
+          <h2 style={S.pageTitle}>Bias Audit</h2>
+          {data?.timestamp && (
+            <p style={S.pageSubtitle}>Last run: {new Date(data.timestamp).toLocaleString()}</p>
+          )}
         </div>
-        <button style={styles.btn} onClick={runAudit} disabled={running}>
-          {running ? 'Running…' : 'Run Audit (100 users)'}
+        <button className="audit-btn" style={S.runBtn} onClick={run} disabled={running}>
+          {running ? 'Running...' : 'Run Audit (100 users)'}
         </button>
       </div>
 
-      {loading && <p style={styles.dim}>Loading…</p>}
+      {loading && <div style={S.dim}>Loading audit data...</div>}
 
       {radarData.length > 0 && (
-        <div style={styles.radarBox}>
-          <p style={styles.hint}>Higher = better (less biased / more diverse)</p>
-          <ResponsiveContainer width="100%" height={300}>
-            <RadarChart data={radarData}>
-              <PolarGrid stroke="#1e293b" />
-              <PolarAngleAxis dataKey="dim" tick={{ fill:'#64748b', fontSize:12 }} />
-              <Radar dataKey="value" stroke="#6366f1" fill="#6366f1" fillOpacity={0.35} />
-              <Tooltip
-                contentStyle={{ background:'#1e293b', border:'1px solid #334155', borderRadius:8 }}
-                formatter={v => `${v.toFixed(1)} / 100`}
-              />
-            </RadarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+        <div style={S.body}>
+          <div style={S.radarWrap}>
+            <div style={S.chartLabel}>Higher = less biased / more diverse</div>
+            <ResponsiveContainer width="100%" height={340}>
+              <RadarChart data={radarData}>
+                <PolarGrid stroke="#1a1a1a" />
+                <PolarAngleAxis
+                  dataKey="axis"
+                  tick={{ fill:'#3a3530', fontSize:10, fontFamily:"'JetBrains Mono',monospace" }}
+                />
+                <Radar dataKey="value" stroke="#c8a96e" fill="#c8a96e" fillOpacity={0.15} strokeWidth={1.5} />
+                <Tooltip
+                  contentStyle={{ background:'#0d0d0d', border:'1px solid #1a1a1a', fontFamily:"'JetBrains Mono',monospace", fontSize:11 }}
+                  formatter={v => [v.toFixed(3), '']}
+                />
+              </RadarChart>
+            </ResponsiveContainer>
+          </div>
 
-      {data && !data.message && (
-        <div style={styles.metricGrid}>
-          <Metric label="Pop conc. (top 10%)" value={((data.pop_conc_top10pct_at10 || 0)*100).toFixed(1) + '%'} />
-          <Metric label="Pop conc. (top 20%)" value={((data.pop_conc_top20pct_at10 || 0)*100).toFixed(1) + '%'} />
-          <Metric label="Genre count"         value={data.n_genres || '—'} />
-          <Metric label="Genre entropy"       value={(data.genre_entropy || 0).toFixed(2)} />
-        </div>
-      )}
-
-      {data?.genre_dist && (
-        <div style={styles.genreBox}>
-          <h4 style={styles.subTitle}>Genre Distribution in Top-10 Recs</h4>
-          {Object.entries(data.genre_dist).map(([g, v]) => (
-            <div key={g} style={styles.genreRow}>
-              <span style={styles.genreLabel}>{g}</span>
-              <div style={styles.genreBar}>
-                <div style={{ ...styles.genreBarFill, width: `${v * 100}%` }} />
+          <div style={S.statsCol}>
+            <div style={S.statsLabel}>Audit Results</div>
+            {stats.map(s => (
+              <div key={s.label} style={S.statRow}>
+                <span style={S.statKey}>{s.label}</span>
+                <span style={S.statVal}>{s.val}</span>
               </div>
-              <span style={styles.genrePct}>{(v * 100).toFixed(1)}%</span>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
-
-      {data?.message && <p style={styles.dim}>{data.message}</p>}
     </div>
   );
 }
 
-function Metric({ label, value }) {
-  return (
-    <div style={{ background:'#0f172a', borderRadius:10, padding:'12px 10px', textAlign:'center' }}>
-      <div style={{ fontSize:20, fontWeight:700, color:'#818cf8' }}>{value}</div>
-      <div style={{ fontSize:12, color:'#64748b', marginTop:2 }}>{label}</div>
-    </div>
-  );
-}
-
-const styles = {
-  header:       { display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:20 },
-  title:        { margin:0, fontSize:16, color:'#e2e8f0' },
-  ts:           { margin:'4px 0 0', fontSize:12, color:'#475569' },
-  btn:          { padding:'8px 16px', borderRadius:8, border:'none', background:'#6366f1', color:'#fff', cursor:'pointer', fontSize:13 },
-  radarBox:     { background:'#0f172a', borderRadius:12, padding:16, marginBottom:20 },
-  hint:         { fontSize:12, color:'#475569', margin:'0 0 8px' },
-  metricGrid:   { display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(140px, 1fr))', gap:12, marginBottom:20 },
-  genreBox:     { background:'#0f172a', borderRadius:12, padding:16 },
-  subTitle:     { margin:'0 0 12px', fontSize:14, color:'#94a3b8' },
-  genreRow:     { display:'flex', alignItems:'center', gap:8, marginBottom:6 },
-  genreLabel:   { color:'#64748b', fontSize:12, minWidth:120 },
-  genreBar:     { flex:1, height:6, background:'#1e293b', borderRadius:3 },
-  genreBarFill: { height:'100%', background:'#6366f1', borderRadius:3, transition:'width 0.5s' },
-  genrePct:     { color:'#475569', fontSize:12, minWidth:40, textAlign:'right' },
-  dim:          { color:'#475569', fontSize:14 },
+const S = {
+  header: { display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:40 },
+  pageTitle: { fontSize:28, fontWeight:800, letterSpacing:'-0.02em', color:'#e8e0d4' },
+  pageSubtitle: { fontSize:11, color:'#3a3530', marginTop:4, fontFamily:"'JetBrains Mono',monospace" },
+  runBtn: {
+    padding:'10px 24px', background:'#c8a96e', border:'none',
+    color:'#080808', fontSize:11, fontFamily:"'Syne',sans-serif", fontWeight:700,
+    letterSpacing:'0.06em', textTransform:'uppercase', cursor:'pointer', borderRadius:0,
+  },
+  dim: { color:'#2a2520', fontSize:12, fontFamily:"'JetBrains Mono',monospace" },
+  body: { display:'grid', gridTemplateColumns:'1fr 280px', gap:1, background:'#1a1a1a' },
+  radarWrap: { background:'#0d0d0d', padding:'24px 20px' },
+  chartLabel: { fontFamily:"'JetBrains Mono',monospace", fontSize:9, color:'#3a3530', letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:8 },
+  statsCol: { background:'#0d0d0d', padding:'24px 20px' },
+  statsLabel: { fontFamily:"'JetBrains Mono',monospace", fontSize:9, color:'#3a3530', letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:20 },
+  statRow: { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'12px 0', borderBottom:'1px solid #111' },
+  statKey: { fontSize:11, color:'#4a4540' },
+  statVal: { fontFamily:"'JetBrains Mono',monospace", fontSize:14, color:'#c8a96e', fontWeight:500 },
 };

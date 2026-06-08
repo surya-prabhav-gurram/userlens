@@ -1,119 +1,164 @@
 import React, { useState } from 'react';
 import { api } from '../api';
 
-export default function ColdStartDemo({ items }) {
-  const [sequence, setSequence]   = useState([]);
-  const [input, setInput]         = useState('');
-  const [recs, setRecs]           = useState([]);
-  const [pathway, setPathway]     = useState('');
-  const [loading, setLoading]     = useState(false);
+export default function ColdStartDemo() {
+  const [inputId, setInputId]   = useState('');
+  const [history, setHistory]   = useState([]);
+  const [recs, setRecs]         = useState([]);
+  const [pathway, setPathway]   = useState('');
+  const [loading, setLoading]   = useState(false);
 
-  async function addItem() {
-    const id = parseInt(input);
-    if (isNaN(id)) return;
-    const newSeq = [...sequence, id];
-    setSequence(newSeq);
-    setInput('');
-    await getRecs(newSeq);
-  }
-
-  async function getRecs(seq) {
+  async function fetchRecs(hist) {
+    if (!hist.length) { setRecs([]); setPathway(''); return; }
     setLoading(true);
     try {
-      const res = await api.recommend({ sequence: seq, k: 10, mode: 'neural' });
-      setRecs(res.items || []);
-      setPathway(res.pathway || '');
+      const r = await api.recommend({ sequence: hist.map(Number), k: 10, mode: 'neural' });
+      setRecs(r.items || []);
+      setPathway(r.pathway || '');
     } catch(e) {}
     setLoading(false);
   }
 
-  function reset() { setSequence([]); setRecs([]); setPathway(''); }
+  function addItem() {
+    const id = parseInt(inputId);
+    if (!id || isNaN(id)) return;
+    const next = [...history, id];
+    setHistory(next);
+    setInputId('');
+    fetchRecs(next);
+  }
 
-  const pathwayColor = pathway === 'cold_content' ? '#f59e0b' : pathway === 'warm_neural' ? '#22c55e' : '#6366f1';
+  function reset() {
+    setHistory([]);
+    setRecs([]);
+    setPathway('');
+    setInputId('');
+  }
+
+  const isCold = pathway === 'cold_content';
 
   return (
     <div>
-      <h3 style={styles.title}>Cold-Start Demo</h3>
-      <p style={styles.desc}>
-        Start with an empty history. Add items one-by-one and watch the system switch
-        from content-based cold-start retrieval to neural recommendations as history grows.
-      </p>
+      <style>{`
+        .add-btn:hover { background: #b89858 !important; }
+        .reset-btn:hover { border-color: #3a3530 !important; color: #6a6560 !important; }
+        .cold-input:focus { outline: none; border-color: #c8a96e !important; }
+      `}</style>
 
-      <div style={styles.controls}>
-        <input
-          style={styles.input}
-          type="number"
-          placeholder="Item ID (3–1000)"
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && addItem()}
-        />
-        <button style={styles.btn} onClick={addItem}>Add Item</button>
-        <button style={styles.resetBtn} onClick={reset}>Reset</button>
+      <div style={S.header}>
+        <div>
+          <h2 style={S.pageTitle}>Cold Start Demo</h2>
+          <p style={S.pageSubtitle}>Add items one by one — watch the pathway switch at 3 interactions</p>
+        </div>
       </div>
 
-      {sequence.length > 0 && (
-        <div style={styles.seqBox}>
-          <span style={styles.seqLabel}>Current history ({sequence.length} items):</span>
-          <div style={styles.seqItems}>
-            {sequence.map((id, i) => (
-              <span key={i} style={styles.seqChip}>Item {id}</span>
+      {/* Input */}
+      <div style={S.inputRow}>
+        <input
+          className="cold-input"
+          style={S.input}
+          type="number"
+          min={3} max={32722}
+          placeholder="Item ID (3–32722)"
+          value={inputId}
+          onChange={e => setInputId(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && addItem()}
+        />
+        <button className="add-btn" style={S.addBtn} onClick={addItem}>Add Item</button>
+        <button className="reset-btn" style={S.resetBtn} onClick={reset}>Reset</button>
+      </div>
+
+      {/* History chips */}
+      {history.length > 0 && (
+        <div style={S.histChips}>
+          <span style={S.histChipsLabel}>Current history ({history.length} items):</span>
+          <div style={S.chips}>
+            {history.map((id, i) => (
+              <span key={i} style={S.chip}>Item {id}</span>
             ))}
           </div>
         </div>
       )}
 
+      {/* Pathway indicator */}
       {pathway && (
-        <div style={{ ...styles.pathwayBanner, borderColor: pathwayColor }}>
-          <span style={{ color: pathwayColor, fontWeight:700 }}>
-            {pathway === 'cold_content' ? '❄️ Cold Start' : pathway === 'warm_neural' ? '🔥 Warm Neural' : '🔀 Blend'}
-          </span>
-          <span style={styles.pathwayDesc}>
-            {pathway === 'cold_content'
-              ? ` — Content-based fallback (< 3 interactions)`
-              : ` — Neural two-tower retrieval (≥ 3 interactions)`}
-          </span>
+        <div style={{ ...S.pathwayBanner, ...(isCold ? S.pathwayCold : S.pathwayWarm) }}>
+          <div style={S.pathwayLine} />
+          <div style={S.pathwayContent}>
+            <span style={S.pathwayName}>{isCold ? 'Cold Start' : 'Warm Neural'}</span>
+            <span style={S.pathwayDesc}>
+              {isCold
+                ? 'Content-based fallback (< 3 interactions)'
+                : 'Neural two-tower retrieval (>= 3 interactions)'}
+            </span>
+          </div>
         </div>
       )}
 
-      {loading && <p style={styles.dim}>Retrieving recommendations…</p>}
-
-      {recs.length > 0 && (
-        <div style={styles.recGrid}>
+      {/* Results */}
+      {loading && <div style={S.dim}>Fetching recommendations...</div>}
+      {!loading && recs.length > 0 && (
+        <div style={S.recGrid}>
           {recs.map((item, i) => (
-            <div key={item.item_id} style={styles.recCard}>
-              <span style={styles.recRank}>#{i+1}</span>
-              <span style={styles.recTitle}>{item.title}</span>
-              <span style={styles.recScore}>{item.score.toFixed(3)}</span>
+            <div key={item.item_id} style={S.recCard}>
+              <div style={S.cardRank}>{String(i + 1).padStart(2, '0')}</div>
+              <div style={S.cardTitle}>{item.title}</div>
+              <div style={S.cardScore}>{item.score.toFixed(3)}</div>
             </div>
           ))}
         </div>
-      )}
-
-      {!loading && recs.length === 0 && (
-        <p style={styles.dim}>Add at least one item to get recommendations.</p>
       )}
     </div>
   );
 }
 
-const styles = {
-  title:        { margin:'0 0 8px', fontSize:16, color:'#e2e8f0' },
-  desc:         { color:'#64748b', fontSize:14, marginBottom:20 },
-  controls:     { display:'flex', gap:8, marginBottom:16 },
-  input:        { flex:1, padding:'8px 12px', borderRadius:8, border:'1px solid #334155', background:'#1e293b', color:'#e2e8f0', fontSize:14 },
-  btn:          { padding:'8px 16px', borderRadius:8, border:'none', background:'#6366f1', color:'#fff', cursor:'pointer' },
-  resetBtn:     { padding:'8px 16px', borderRadius:8, border:'1px solid #334155', background:'transparent', color:'#94a3b8', cursor:'pointer' },
-  seqBox:       { background:'#0f172a', borderRadius:10, padding:12, marginBottom:16 },
-  seqLabel:     { color:'#64748b', fontSize:13, display:'block', marginBottom:8 },
-  seqItems:     { display:'flex', flexWrap:'wrap', gap:6 },
-  seqChip:      { padding:'4px 10px', background:'#1e293b', borderRadius:20, fontSize:12, color:'#94a3b8' },
-  pathwayBanner:{ border:'1px solid', borderRadius:10, padding:'10px 14px', marginBottom:16 },
-  pathwayDesc:  { color:'#64748b', fontSize:13 },
-  recGrid:      { display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 },
-  recCard:      { background:'#1e293b', borderRadius:8, padding:'10px 12px', display:'flex', alignItems:'center', gap:8 },
-  recRank:      { color:'#6366f1', fontWeight:700, fontSize:13, minWidth:24 },
-  recTitle:     { flex:1, color:'#cbd5e1', fontSize:13 },
-  recScore:     { color:'#475569', fontSize:12 },
-  dim:          { color:'#475569', fontSize:14 },
+const S = {
+  header: { marginBottom:32 },
+  pageTitle: { fontSize:28, fontWeight:800, letterSpacing:'-0.02em', color:'#e8e0d4' },
+  pageSubtitle: { fontSize:11, color:'#3a3530', marginTop:4, fontFamily:"'JetBrains Mono',monospace" },
+
+  inputRow: { display:'flex', gap:0, marginBottom:20 },
+  input: {
+    flex:1, maxWidth:320,
+    padding:'10px 16px',
+    background:'#0d0d0d',
+    border:'1px solid #1a1a1a',
+    borderRight:'none',
+    color:'#e8e0d4',
+    fontSize:13,
+    fontFamily:"'JetBrains Mono',monospace",
+    borderRadius:0,
+    transition:'border-color 0.15s',
+  },
+  addBtn: {
+    padding:'10px 24px', background:'#c8a96e', border:'none',
+    color:'#080808', fontSize:11, fontFamily:"'Syne',sans-serif", fontWeight:700,
+    letterSpacing:'0.06em', textTransform:'uppercase', cursor:'pointer', borderRadius:0,
+  },
+  resetBtn: {
+    padding:'10px 20px', background:'transparent', border:'1px solid #1a1a1a', borderLeft:'none',
+    color:'#3a3530', fontSize:11, fontFamily:"'Syne',sans-serif", fontWeight:600,
+    letterSpacing:'0.06em', textTransform:'uppercase', cursor:'pointer', borderRadius:0,
+    transition:'all 0.15s',
+  },
+
+  histChips: { marginBottom:24 },
+  histChipsLabel: { fontFamily:"'JetBrains Mono',monospace", fontSize:9, color:'#3a3530', letterSpacing:'0.1em', textTransform:'uppercase', display:'block', marginBottom:10 },
+  chips: { display:'flex', flexWrap:'wrap', gap:6 },
+  chip: { padding:'4px 10px', background:'#111', border:'1px solid #1a1a1a', fontSize:11, color:'#4a4540', fontFamily:"'JetBrains Mono',monospace" },
+
+  pathwayBanner: { display:'flex', alignItems:'stretch', gap:0, marginBottom:28, overflow:'hidden' },
+  pathwayCold: { background:'rgba(200,169,110,0.04)', border:'1px solid rgba(200,169,110,0.15)' },
+  pathwayWarm: { background:'rgba(74,222,128,0.04)', border:'1px solid rgba(74,222,128,0.15)' },
+  pathwayLine: { width:3, background:'#c8a96e', flexShrink:0 },
+  pathwayContent: { padding:'16px 20px' },
+  pathwayName: { display:'block', fontSize:14, fontWeight:700, color:'#e8e0d4', letterSpacing:'0.02em', marginBottom:4 },
+  pathwayDesc: { fontFamily:"'JetBrains Mono',monospace", fontSize:10, color:'#3a3530' },
+
+  dim: { color:'#2a2520', fontSize:12, fontFamily:"'JetBrains Mono',monospace", marginTop:16 },
+  recGrid: { display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:1, background:'#1a1a1a' },
+  recCard: { background:'#0d0d0d', padding:'14px 16px', display:'flex', alignItems:'center', gap:12 },
+  cardRank: { fontFamily:"'JetBrains Mono',monospace", fontSize:11, color:'#c8a96e', minWidth:22, flexShrink:0 },
+  cardTitle: { fontSize:12, color:'#6a6560', flex:1, lineHeight:1.4 },
+  cardScore: { fontFamily:"'JetBrains Mono',monospace", fontSize:10, color:'#2a2520', flexShrink:0 },
 };
