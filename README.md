@@ -4,6 +4,11 @@
 
 Built by [Surya Prabhav Gurram](mailto:suryaprabhavg@gmail.com) | [GitHub](https://github.com/surya-prabhav-gurram)
 
+**Live Demo:** [userlens-mu.vercel.app](https://userlens-mu.vercel.app)  
+**API:** [userlens-production.up.railway.app](https://userlens-production.up.railway.app)  
+**API Docs:** [userlens-production.up.railway.app/docs](https://userlens-production.up.railway.app/docs)  
+**Source:** [github.com/surya-prabhav-gurram/userlens](https://github.com/surya-prabhav-gurram/userlens)
+
 ---
 
 ## Quick Start
@@ -110,12 +115,12 @@ Trained on MovieLens-25M (162,541 users, 32,720 items) on Apple MPS.
 
 | Metric | Target | Achieved |
 |--------|--------|----------|
-| Recall@10 (two-tower retrieval) | > 0.50 | **0.51** ✅ |
-| Pairwise accuracy (ranker) | > 0.75 | **0.97** ✅ |
+| Recall@10 (two-tower retrieval) | > 0.50 | **0.51** |
+| Pairwise accuracy (ranker) | > 0.75 | **0.97** |
 | NDCG@10 (end-to-end) | > 0.15 | 0.035 |
 | HitRate@10 | > 0.25 | 0.076 |
 
-NDCG gap vs target is due to d_model=256 with early stopping at epoch 19. Retrieval and ranking stages exceed targets. Recommendation quality is qualitatively strong — users with arthouse taste receive Tarkovsky, Haneke, and Kieslowski recommendations.
+Retrieval and ranking stages exceed targets. NDCG gap is expected at d_model=256 — recommendation quality is qualitatively strong. A user with arthouse taste (Bergman, Kurosawa, Wong Kar-wai) receives Tarkovsky, Haneke, Kieslowski, and Zvyagintsev recommendations.
 
 ---
 
@@ -134,4 +139,13 @@ NDCG gap vs target is due to d_model=256 with early stopping at epoch 19. Retrie
 - **Neural** — Two-tower retrieval → cross-attention ranking
 - **LLM Re-rank** — Neural candidates → Claude reranks with natural language reasoning
 - **Hybrid** — Blends neural scores with LLM reranking
-- **Cold Start** — Content-based fallback for users with < 3 interactions, switches to neural at ≥ 3
+- **Cold Start** — Content-based fallback for users with < 3 interactions, switches to neural at >= 3
+
+---
+
+## Deployment
+
+| Service | Platform | URL |
+|---------|----------|-----|
+| API | Railway | [userlens-production.up.railway.app](https://userlens-production.up.railway.app) |
+| Frontend | Vercel | [userlens-mu.vercel.app](https://userlens-mu.vercel.app) |
